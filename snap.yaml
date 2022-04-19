@@ -1,6 +1,3 @@
 ---
-prometheus1.core.prod.nub: 
-  - '7@mon-sun@2,4,8'
-  - '2@sun@8'
 7@mon-sun@2,4,8:
   - prometheus1.core.prod.nub
