@@ -22,9 +22,13 @@ def connect_to_os():
 ## read yaml - snapshot schedule settings
 def snap_sched():
     with open('snap.yaml') as f:
+        scheduled_servers = []
         snap_sched = yaml.safe_load(f)
-    return snap_sched
-    # sys.exit()
+        for schedule, servers in snap_sched.items():
+            for i in snap_sched[schedule]:
+                scheduled_servers.append(i)
+    # print(scheduled_servers)
+    return snap_sched, scheduled_servers
 
 ## get server list with IDs and volumes IDs
 def server_list(conn):
@@ -35,10 +39,16 @@ def server_list(conn):
         volumes_raw = server._info['os-extended-volumes:volumes_attached']
         for i in range(0, len(volumes_raw)):
             volumes.append(volumes_raw[i]['id'])
-        server_details[server.name] = server.id, volumes
-        # print(server_details)
+        # server_details[server.name] = server.id, volumes
+        server_details[server.name] = volumes
     return server_details
-    # sys.exit()
+
+def blabla(snap_sched, scheduled_servers, server_details):
+    # print(scheduled_servers)
+    for server_name,server_volumes in server_details.items():
+        # print(server_name)
+        if server_name in scheduled_servers:
+            print(server_name)
 
 ## create rbd snapshot on image
 def ceph_rbd():
@@ -54,8 +64,10 @@ def ceph_rbd():
 
 def main():
     conn = connect_to_os()
-    snap_sched()
-    server_list(conn)
+    s = snap_sched()[0]
+    srv = snap_sched()[1]
+    server_details = server_list(conn)
+    blabla(s, srv, server_details)
     #ceph_rbd()
 
 if __name__ == "__main__":
