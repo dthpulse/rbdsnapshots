@@ -10,6 +10,7 @@ import pytz
 import time
 import shutil
 import filecmp
+from datetime import datetime
 from novaclient import client as novaclient
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
@@ -57,18 +58,50 @@ def connect_to_os():
     return os_conn
 
 ## create rbd snapshot on image
-def ceph_rbd(server_details):
+def ceph_conn():
     cluster = rados.Rados(conffile='/etc/ceph/ceph.conf')
     cluster.connect()
     ioctx = cluster.open_ioctx('rbd')
-    for server, volume in server_details.items():
-        volume
+
+def create_general_snap(general_scheduled_servers):
+    ceph_conn()
+    keep_copies = '5'
+    for server, volume in general_scheduled_servers.items():
+        for volume in volumes:
+            now = datetime.now()
+            date_string = now.strftime('%d%m%Y%H%M')
+            image = rbd.Image(ioctx, 'volume-' + volume)
+            image_snap_list = list(image.list_snaps())
+
+            if len(image_snap_list) > keep_copies:
+                image.remove_snap[image_snap_list[0]['name']]
+            
+            image.create_snap('snap_' + date_string)
+            image.close()
+    ioctx.close()
+    cluster.shutdown()
+
+def create_scheduled_snap(snap_sched, server_details):
+    ceph_conn()
+    for schedule, server in snap_sched.items():
+        for volume in server_details[server]:
+            now = datetime.now()
+            date_string = now.strftime('%d%m%Y%H%M')
+            image = rbd.Image(ioctx, 'volume-' + volume)
+            image_snap_list = list(image.list_snaps())
+
+            if len(image_snap_list) > keep_copies:
+                image.remove_snap[image_snap_list[0]['name']]
+            
+            image.create_snap('snap_' + date_string)
+            image.close()
+    ioctx.close()
+    cluster.shutdown()
     # image = rbd.Image(ioctx, 'image1')
     # image.create_snap('snapshottest')
     # image.close()
     # ioctx.close()
     # cluster.shutdown()
-    return ceph_conn
 
 ## read yaml - snapshot schedule settings
 def snap_sched():
@@ -97,7 +130,7 @@ def snap_sched():
     return snap_sched, scheduled_servers
 
 ## get server list with IDs and volumes IDs
-def server_list():
+def server_list(os_conn):
     server_details = dict()
     servers_list = os_conn.servers.list()
     new_server_list = snapmanager_dir + '/server_list.txt'
@@ -132,14 +165,19 @@ def server_list():
     return server_details
 
 ## VMs not scheduled in yaml file will be backed up with general schedule
-def general_snap_schedule(scheduled_servers, server_details):
-    general_scheduled = {}
+def general_snap_schedule(scheduled_servers, server_details, snap_sched):
+    general_scheduled_servers = {}
     for server_name,server_volumes in server_details.items():
         if server_name not in scheduled_servers:
-            keep_copies = '5'
-            hour = '6,12,18'
-            day_of_week = 'mon-fri'
-            scheduler_conf()
+            general_scheduled_servers[server_name] = server_volumes
+    return general_scheduled_servers
+
+def general_schedule(general_scheduled_servers):
+    hour = '6,12,18'
+    day_of_week = 'mon-fri'
+    scheduler_conf()
+    for server, volumes in general_scheduled_servers.items():
+        for volume in volumes:
             scheduler.add_job(
                 job_function, 
                 'cron', 
@@ -148,10 +186,8 @@ def general_snap_schedule(scheduled_servers, server_details):
                 minute='15', 
                 jobstore='mysql_snap', 
                 replace_existing=True, 
-                id=server_name + '_general')
-            scheduler.shutdown()
-            general_scheduled[server_name] = server_volumes
-    return general_scheduled
+                id=volume + '_general')
+    scheduler.shutdown()
 
 def service_schedule():
     scheduler_conf()
