@@ -84,6 +84,15 @@ def create_general_snap(general_scheduled_servers):
 def create_scheduled_snap(snap_sched, server_details):
     ceph_conn()
     for schedule, server in snap_sched.items():
+        scheduled_hours = schedule.split('@', 2)[2]
+        scheduled_days  = schedule.split('@', 2)[1]
+        keep_copies     = schedule.split('@', 2)[0]
+        if ',' in scheduled_hours and '-' in scheduled_days and ',' in scheduled_days:
+            snap_name = 'hourly'
+        elif '-' not in scheduled_days and ',' not in scheduled_days:
+            snap_name = 'daily'
+            
+
         for volume in server_details[server]:
             now = datetime.now()
             date_string = now.strftime('%d%m%Y%H%M')
@@ -93,7 +102,7 @@ def create_scheduled_snap(snap_sched, server_details):
             if len(image_snap_list) > keep_copies:
                 image.remove_snap[image_snap_list[0]['name']]
             
-            image.create_snap('snap_' + date_string)
+            image.create_snap('hourly_' + date_string)
             image.close()
     ioctx.close()
     cluster.shutdown()
