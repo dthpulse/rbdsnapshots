@@ -15,6 +15,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.executors.pool import ProcessPoolExecutor
 
+snapmanager_dir = '/var/lib/snapmanager'
+os.mkdir(snapmanager_dir)
+
 ## apscheduler settings
 def scheduler_conf():
     MYSQL_SNAP = {
@@ -40,7 +43,7 @@ def scheduler_conf():
     try:
         scheduler.start()
     except:
-        print("scheduler already running")
+        print("scheduler is already running")
 
 ## connect to OS
 def connect_to_os():
@@ -54,10 +57,12 @@ def connect_to_os():
     return os_conn
 
 ## create rbd snapshot on image
-def ceph_rbd():
+def ceph_rbd(server_details):
     cluster = rados.Rados(conffile='/etc/ceph/ceph.conf')
     cluster.connect()
     ioctx = cluster.open_ioctx('rbd')
+    for server, volume in server_details.items():
+        volume
     # image = rbd.Image(ioctx, 'image1')
     # image.create_snap('snapshottest')
     # image.close()
@@ -67,8 +72,6 @@ def ceph_rbd():
 
 ## read yaml - snapshot schedule settings
 def snap_sched():
-    snapmanager_dir = '/var/lib/snapmanager'
-    os.mkdir(snapmanager_dir)
     orig_yaml = snapmanager_dir + '/snap_sched.yml'
     used_yaml = orig_yaml + '-'
     try:
@@ -94,43 +97,82 @@ def snap_sched():
     return snap_sched, scheduled_servers
 
 ## get server list with IDs and volumes IDs
-def server_list(os_conn):
+def server_list():
     server_details = dict()
-    server = os_conn.servers.list()
-    for server in os_conn.servers.list():
+    servers_list = os_conn.servers.list()
+    new_server_list = snapmanager_dir + '/server_list.txt'
+    used_server_list = new_server_list + '-'
+    
+    for server in servers_list:
         volumes = []
         volumes_raw = server._info['os-extended-volumes:volumes_attached']
         for i in range(0, len(volumes_raw)):
             volumes.append(volumes_raw[i]['id'])
-        # server_details[server.name] = server.id, volumes
         server_details[server.name] = volumes
-    return server_details
-
-## compare server details, if server dict is not the same
-## that would mean we added or removed some VMs on OpenStack
-## Remove all jobs and reschedule new
-def compare_server_details(server_details, os_conn):
-    server_details_old = server_details
-    server_list(os_conn)
-    if server_details_old != server_details:
+    
+    with open(new_server_list, 'w') as f:
+        for i in sorted(server_details):
+            line=i, server_details[i]
+            f.write(str(line)+'\n')
+        f.close()
+    
+    try:
+        file_check = used_server_list.resolve(strict=True)
+    except:
+        shutil.copyfile(new_server_list, used_server_list)
+    finally:
+        compare_result = filecmp.cmp(new_server_list, used_server_list, shallow=False)
+    
+    if not compare_result:
+        shutil.copyfile(new_server_list, used_server_list)
         scheduler_conf()
-        schduler.remove_all_jobs(jobstore='mysql_snap')
+        scheduler.remove_all_jobs(jobstore='mysql_snap')
         scheduler.shutdown()
+    
+    return server_details
 
 ## VMs not scheduled in yaml file will be backed up with general schedule
 def general_snap_schedule(scheduled_servers, server_details):
+    general_scheduled = {}
     for server_name,server_volumes in server_details.items():
         if server_name not in scheduled_servers:
             keep_copies = '5'
             hour = '6,12,18'
             day_of_week = 'mon-fri'
             scheduler_conf()
-            scheduler.add_job(job_function, 'cron', day_of_week=day_of_week, hour=hour, minute='15', jobstore='mysql_snap', replace_existing=True, id=server_name + '_general')
+            scheduler.add_job(
+                job_function, 
+                'cron', 
+                day_of_week=day_of_week, 
+                hour=hour, 
+                minute='15', 
+                jobstore='mysql_snap', 
+                replace_existing=True, 
+                id=server_name + '_general')
             scheduler.shutdown()
+            general_scheduled[server_name] = server_volumes
+    return general_scheduled
 
 def service_schedule():
     scheduler_conf()
-    scheduler.add_job(snap_sched, 'cron', day_of_week='mon-sun', hour='9,11,13,15,17,19', minute='25', jobstore='mysql_service', replace_existing=True, id='snap_sched')
+    scheduler.add_job(
+        snap_sched, 
+        'cron', 
+        day_of_week='mon-sun', 
+        hour='9,11,13,15,17,19', 
+        minute='25', 
+        jobstore='mysql_service', 
+        replace_existing=True, 
+        id='snap_sched')
+    scheduler.add_job(
+        server_list, 
+        'cron', 
+        day_of_week='mon-sun', 
+        hour='9,11,13,15,17,19', 
+        minute='45', 
+        jobstore='mysql_service', 
+        replace_existing=True, 
+        id='server_list')
     scheduler.shutdown()
 
 def main():
