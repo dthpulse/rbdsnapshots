@@ -66,17 +66,23 @@ def ceph_conn():
 def create_general_snap(general_scheduled_servers):
     ceph_conn()
     keep_copies = '5'
-    for server, volume in general_scheduled_servers.items():
+    snap_name = 'general'
+    for server, volumes in general_scheduled_servers.items():
         for volume in volumes:
             now = datetime.now()
             date_string = now.strftime('%d%m%Y%H%M')
             image = rbd.Image(ioctx, 'volume-' + volume)
+            image.create_snap(snap_name + '_' + date_string)
             image_snap_list = list(image.list_snaps())
-
-            if len(image_snap_list) > keep_copies:
-                image.remove_snap[image_snap_list[0]['name']]
-            
-            image.create_snap('snap_' + date_string)
+            snaps_delete = []
+            for i in image_snap_list:
+                if snap_name in i:
+                    snaps_delete.append(i)
+            snaps_filtered = len(snaps_delete) - keep_copies
+            if snaps_filtered > 0:
+                del snaps_delete[:-snaps_filtered]
+            for snap in snaps_delete:
+                image.remove_snap[image_snap_list[0][snap]]
             image.close()
     ioctx.close()
     cluster.shutdown()
@@ -87,30 +93,30 @@ def create_scheduled_snap(snap_sched, server_details):
         scheduled_hours = schedule.split('@', 2)[2]
         scheduled_days  = schedule.split('@', 2)[1]
         keep_copies     = schedule.split('@', 2)[0]
-        if ',' in scheduled_hours and '-' in scheduled_days and ',' in scheduled_days:
+        if (',' in scheduled_hours or '-' in scheduled_hours) and ('-' in scheduled_days or ',' in scheduled_days):
             snap_name = 'hourly'
         elif '-' not in scheduled_days and ',' not in scheduled_days:
+            snap_name = 'weekly'
+        elif ',' not in scheduled_hours and '-' not in scheduled_hours:
             snap_name = 'daily'
-            
-
         for volume in server_details[server]:
             now = datetime.now()
             date_string = now.strftime('%d%m%Y%H%M')
             image = rbd.Image(ioctx, 'volume-' + volume)
+            image.create_snap(snap_name + '_' + date_string)
             image_snap_list = list(image.list_snaps())
-
-            if len(image_snap_list) > keep_copies:
-                image.remove_snap[image_snap_list[0]['name']]
-            
-            image.create_snap('hourly_' + date_string)
+            snaps_delete = []
+            for i in image_snap_list:
+                if snap_name in i:
+                    snaps_delete.append(i)
+            snaps_filtered = len(snaps_delete) - keep_copies
+            if snaps_filtered > 0:
+                del snaps_delete[:-snaps_filtered]
+            for snap in snaps_delete:
+                image.remove_snap[image_snap_list[0][snap]]
             image.close()
     ioctx.close()
     cluster.shutdown()
-    # image = rbd.Image(ioctx, 'image1')
-    # image.create_snap('snapshottest')
-    # image.close()
-    # ioctx.close()
-    # cluster.shutdown()
 
 ## read yaml - snapshot schedule settings
 def snap_sched():
