@@ -57,12 +57,13 @@ def connect_to_os():
         project_domain_id = 'b2571699c2044245ac79c60e7c6ff09d')
     return os_conn
 
-## create rbd snapshot on image
+## connect to Ceph
 def ceph_conn():
     cluster = rados.Rados(conffile='/etc/ceph/ceph.conf')
     cluster.connect()
     ioctx = cluster.open_ioctx('rbd')
 
+## using librbd we're connecting to the Ceph and creating snapshots
 def create_general_snap(general_scheduled_servers):
     ceph_conn()
     keep_copies = '5'
@@ -87,6 +88,7 @@ def create_general_snap(general_scheduled_servers):
     ioctx.close()
     cluster.shutdown()
 
+## using librbd we're connecting to the Ceph and creating snapshots
 def create_scheduled_snap(snap_sched, server_details):
     ceph_conn()
     for schedule, server in snap_sched.items():
@@ -119,6 +121,11 @@ def create_scheduled_snap(snap_sched, server_details):
     cluster.shutdown()
 
 ## read yaml - snapshot schedule settings
+## snap_sched.yml is file defined by admins
+## here we also checking if there is any update by backing up the old one 
+## and comparing it with new one. This function is scheduled with apscheduler to run regularly
+## we get snap_sched dict like {'7@mon-fri@2,4':'['server1', 'server2',...]'}
+## and the list of scheduled_servers
 def snap_sched():
     orig_yaml = snapmanager_dir + '/snap_sched.yml'
     used_yaml = orig_yaml + '-'
@@ -144,8 +151,11 @@ def snap_sched():
 
     return snap_sched, scheduled_servers
 
-## get server list with IDs and volumes IDs
-def server_list(os_conn):
+## get server list with IDs and volumes IDs from OpenStack
+## here we also checking if there is any update on OS by backing up the server list 
+## and comparing it with new one. This function is scheduled with apscheduler to run regularly
+## we get dict with {'server_name':'[volume1, volume2, ...]'}
+def openstack_server_list(os_conn):
     server_details = dict()
     servers_list = os_conn.servers.list()
     new_server_list = snapmanager_dir + '/server_list.txt'
@@ -180,14 +190,14 @@ def server_list(os_conn):
     return server_details
 
 ## VMs not scheduled in yaml file will be backed up with general schedule
-def general_snap_schedule(scheduled_servers, server_details, snap_sched):
+def not_defined_servers(scheduled_servers, server_details):
     general_scheduled_servers = {}
     for server_name,server_volumes in server_details.items():
         if server_name not in scheduled_servers:
             general_scheduled_servers[server_name] = server_volumes
     return general_scheduled_servers
 
-def general_schedule(general_scheduled_servers):
+def create_general_schedule_job(general_scheduled_servers):
     hour = '6,12,18'
     day_of_week = 'mon-fri'
     scheduler_conf()
@@ -205,7 +215,7 @@ def general_schedule(general_scheduled_servers):
                 misfire_grace_time=600)
     scheduler.shutdown()
 
-def service_schedule():
+def create_service_schedule_job():
     scheduler_conf()
     scheduler.add_job(
         snap_sched, 
