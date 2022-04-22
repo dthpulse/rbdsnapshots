@@ -33,11 +33,11 @@ def scheduler_conf():
     }
     executors = {
         'default': {'type': 'threadpool', 'max_workers': 20},
-        'processpool': ProcessPoolExecutor(max_workers=5)
+        'processpool': ProcessPoolExecutor(max_workers=50)
     }
     job_defaults = {
-        'coalesce': False,
-        'max_instances': 3
+        'coalesce': True,
+        'max_instances': 600
     }
     scheduler = BackgroundScheduler(timezone='Europe/Prague')
     scheduler.configure(jobstores=jobstores, executors=executors, job_defaults=job_defaults, timezone='Europe/Prague')
@@ -201,7 +201,8 @@ def general_schedule(general_scheduled_servers):
                 minute='15', 
                 jobstore='mysql_snap', 
                 replace_existing=True, 
-                id=volume + '_general')
+                id=volume + '_general',
+                misfire_grace_time=600)
     scheduler.shutdown()
 
 def service_schedule():
@@ -223,7 +224,8 @@ def service_schedule():
         minute='45', 
         jobstore='mysql_service', 
         replace_existing=True, 
-        id='server_list')
+        id='server_list',
+        misfire_grace_time=600)
     scheduler.shutdown()
 
 def main():
