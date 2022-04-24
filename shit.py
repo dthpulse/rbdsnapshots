@@ -100,34 +100,67 @@ using librbd we're connecting to the Ceph and creating snapshots
 '''
 def create_scheduled_snap(snap_sched, server_details):
     ceph_conn()
-    for schedule, server in snap_sched.items():
-        scheduled_hours = schedule.split('@', 2)[2]
-        scheduled_days  = schedule.split('@', 2)[1]
-        keep_copies     = schedule.split('@', 2)[0]
-        if (',' in scheduled_hours or '-' in scheduled_hours) and ('-' in scheduled_days or ',' in scheduled_days):
-            snap_name = 'hourly'
-        elif '-' not in scheduled_days and ',' not in scheduled_days:
-            snap_name = 'weekly'
-        elif ',' not in scheduled_hours and '-' not in scheduled_hours:
-            snap_name = 'daily'
-        for volume in server_details[server]:
-            now = datetime.now()
-            date_string = now.strftime('%d%m%Y%H%M')
-            image = rbd.Image(ioctx, 'volume-' + volume)
-            image.create_snap(snap_name + '_' + date_string)
-            image_snap_list = list(image.list_snaps())
-            snaps_delete = []
-            for i in image_snap_list:
-                if snap_name in i:
-                    snaps_delete.append(i)
-            snaps_filtered = len(snaps_delete) - keep_copies
-            if snaps_filtered > 0:
-                del snaps_delete[:-snaps_filtered]
-            for snap in snaps_delete:
-                image.remove_snap[image_snap_list[0][snap]]
-            image.close()
-    ioctx.close()
-    cluster.shutdown()
+
+    week = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+    day_of_week_to_snap = []
+    hours_to_snap = []
+    day_sched = 'sat-sun'
+    today = datetime.today().strftime('%a')
+    hour = datetime.now().strftime('%H')
+    minute = datetime.now().strftime('%M')
+    hour_sched = '13-19'
+    
+    if '-' in day_sched:
+        first = week.index(day_sched.split('-', 1)[0])
+        second = week.index(day_sched.split('-',1)[1])
+        for i in range(first, second + 1):
+            day_of_week_to_snap.append(week[i])
+    elif ',' in day_sched:
+        for i in day_sched.split(','):
+            day_of_week_to_snap.append(i)
+    else:
+        day_of_week_to_snap.append(day_sched)
+    
+    if '-' in hour_sched:
+        first = int(hour_sched.split('-')[0])
+        second = int(hour_sched.split('-')[1])
+        for i in range(first, second + 1):
+            hours_to_snap.append(i)
+    elif ',' in hour_sched:
+        for i in hour_sched.split(','):
+            hours_to_snap.append(i)
+    else:
+        hours_to_snap.append(hour_sched)
+    
+    if today.lower() in day_of_week_to_snap and int(hour) in hours_to_snap:
+        for schedule, server in snap_sched.items():
+            scheduled_hours = schedule.split('@', 2)[2]
+            scheduled_days  = schedule.split('@', 2)[1]
+            keep_copies     = schedule.split('@', 2)[0]
+            if (',' in scheduled_hours or '-' in scheduled_hours) and ('-' in scheduled_days or ',' in scheduled_days):
+                snap_name = 'hourly'
+            elif '-' not in scheduled_days and ',' not in scheduled_days:
+                snap_name = 'weekly'
+            elif ',' not in scheduled_hours and '-' not in scheduled_hours:
+                snap_name = 'daily'
+            for volume in server_details[server]:
+                now = datetime.now()
+                date_string = now.strftime('%d%m%Y%H%M')
+                image = rbd.Image(ioctx, 'volume-' + volume)
+                image.create_snap(snap_name + '_' + date_string)
+                image_snap_list = list(image.list_snaps())
+                snaps_delete = []
+                for i in image_snap_list:
+                    if snap_name in i:
+                        snaps_delete.append(i)
+                snaps_filtered = len(snaps_delete) - keep_copies
+                if snaps_filtered > 0:
+                    del snaps_delete[:-snaps_filtered]
+                for snap in snaps_delete:
+                    image.remove_snap[image_snap_list[0][snap]]
+                image.close()
+        ioctx.close()
+        cluster.shutdown()
 
 '''
 read yaml - snapshot schedule settings
@@ -233,6 +266,20 @@ def create_general_snap_job(general_scheduled_servers):
                 id=volume + '_general',
                 misfire_grace_time=600)
     scheduler.shutdown()
+
+def create_scheduled_snap_job(snap_sched, server_details):
+    scheduler_conf()
+    for schedule, server in snap_sched.items():
+        for volume in server_details[server]:
+            scheduler.add_job(
+                create_scheduled_snap,
+                'cron',
+                day_of_week=
+            )
+                
+
+
+
 
 def create_service_schedule_job():
     scheduler_conf()
