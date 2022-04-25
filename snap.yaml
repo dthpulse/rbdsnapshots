@@ -2,6 +2,6 @@
 7@mon-sun@2,4,8:
   - prometheus1.core.prod.nub
   - ulozto1.frontend.prod.nub
-8@sun@8:
+8@sun-mon@8:
   - prometheus1.stage.prod.nub
   - ulozto1.frontend.stage.nub

@@ -7,7 +7,17 @@ with open('snap.yaml') as f:
     scheduled_servers = []
     snap_sched = yaml.safe_load(f)
     print(snap_sched)
-    # for schedule, servers in snap_sched.items():
+    for k, v in snap_sched.items():
+        schedule = k.split('@', 2)
+        keep = schedule[0]
+        scheduled_days = schedule[1]
+        scheduled_hours = schedule[2]
+
+print(keep, scheduled_days, scheduled_hours)
+
+print(scheduled_days.split('-')[1])
+
+
         
 # creating a new dictionary
 # my_dict ={"java":100, "python":112, "c":11}

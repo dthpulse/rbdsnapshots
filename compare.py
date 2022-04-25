@@ -22,6 +22,19 @@ def server_list(os_conn):
             volumes.append(volumes_raw[i]['id'])
         # server_details[server.name] = server.id, volumes
         server_details[server.name] = volumes
+    with open('new_server_list.txt', 'w') as f:
+        for i in sorted(server_details):
+            line = i, server_details[i]
+            line = list(line)
+            f.write(str(line)+'\n')
+        f.close()
+    with open('new_server_list.txt', 'r') as f:
+        lines = f.readlines()
+        for line in lines:
+            line = list(line)
+            print(line[1])
+
+    
     return server_details
 
 ## compare server details
