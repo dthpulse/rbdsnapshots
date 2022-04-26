@@ -21,6 +21,7 @@ from novaclient import client as novaclient
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.executors.pool import ProcessPoolExecutor
+from multiprocessing import Pool, cpu_count
 
 snapmanager_dir = '/var/lib/snapmanager'
 os.mkdir(snapmanager_dir)
@@ -28,31 +29,31 @@ os.mkdir(snapmanager_dir)
 '''
 apscheduler settings
 '''
-def scheduler_conf():
-    MYSQL_SNAP = {
-        "url": "mysql+pymysql://localhost:3306/snapshot_schedule"
-    }
-    MYSQL_SERVICE = {
-        "url": "mysql+pymysql://localhost:3306/service_schedule"
-    }
-    jobstores = {
-        'mysql_snap': SQLAlchemyJobStore(**MYSQL_SNAP),
-        'mysql_service': SQLAlchemyJobStore(**MYSQL_SERVICE)
-    }
-    executors = {
-        'default': {'type': 'threadpool', 'max_workers': 20},
-        'processpool': ProcessPoolExecutor(max_workers=50)
-    }
-    job_defaults = {
-        'coalesce': True,
-        'max_instances': 600
-    }
-    scheduler = BackgroundScheduler(timezone='Europe/Prague')
-    scheduler.configure(jobstores=jobstores, executors=executors, job_defaults=job_defaults, timezone='Europe/Prague')
-    try:
-        scheduler.start()
-    except:
-        print("scheduler is already running")
+
+MYSQL_SNAP = {
+    "url": "mysql+pymysql://localhost:3306/snapshot_schedule"
+}
+MYSQL_SERVICE = {
+    "url": "mysql+pymysql://localhost:3306/service_schedule"
+}
+jobstores = {
+    'mysql_snap': SQLAlchemyJobStore(**MYSQL_SNAP),
+    'mysql_service': SQLAlchemyJobStore(**MYSQL_SERVICE)
+}
+executors = {
+    'default': {'type': 'threadpool', 'max_workers': 20},
+    'processpool': ProcessPoolExecutor(max_workers=50)
+}
+job_defaults = {
+    'coalesce': True,
+    'max_instances': 600
+}
+scheduler = BackgroundScheduler(timezone='Europe/Prague')
+scheduler.configure(jobstores=jobstores, executors=executors, job_defaults=job_defaults, timezone='Europe/Prague')
+try:
+    scheduler.start()
+except:
+    print("scheduler is already running")
 
 '''
 connect to OS
@@ -74,12 +75,12 @@ def ceph_conn():
     cluster = rados.Rados(conffile='/etc/ceph/ceph.conf')
     cluster.connect()
     ioctx = cluster.open_ioctx('rbd')
+    return cluster, ioctx
 
 '''
 using librbd we're connecting to the Ceph and creating snapshots
 '''
-def create_general_snap(general_scheduled_servers):
-    ceph_conn()
+def create_general_snap(general_scheduled_servers, cluster, ioctx):
     keep_copies = '5'
     snap_name = 'general'
     day_of_week_to_snap = ['mon','tue','wed','thu','fri']
@@ -114,9 +115,7 @@ def create_general_snap(general_scheduled_servers):
 '''
 using librbd we're connecting to the Ceph and creating snapshots
 '''
-def create_scheduled_snap(snap_sched, server_details):
-    ceph_conn()
-
+def create_scheduled_snap(snap_sched, server_details, cluster, ioctx):
     week = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
     day_of_week_to_snap = []
     hours_to_snap = []
@@ -189,7 +188,7 @@ and comparing it with new one. This function is scheduled with apscheduler to ru
 we get snap_sched dict like {'7@mon-fri@2,4':'['server1', 'server2',...]'}
 and the list of scheduled_servers
 '''
-def snap_sched():
+def get_snap_sched():
     orig_yaml = snapmanager_dir + '/snap_sched.yml'
     used_yaml = orig_yaml + '-'
     try:
@@ -201,7 +200,6 @@ def snap_sched():
     
     if not compare_result:
         shutil.copyfile(orig_yaml, used_yaml)
-        scheduler_conf()
         scheduler.remove_all_jobs(jobstore='mysql_snap')
         scheduler.shutdown()
 
@@ -248,7 +246,6 @@ def openstack_server_list(os_conn):
     
     if not compare_result:
         shutil.copyfile(new_server_list, used_server_list)
-        scheduler_conf()
         scheduler.remove_all_jobs(jobstore='mysql_snap')
         scheduler.shutdown()
     
@@ -265,15 +262,40 @@ def not_defined_servers(scheduled_servers, server_details):
     return general_scheduled_servers
 
 '''
+now include above functions in mp_scheduled_snap and mp_general_snap so we just need to call apscheduler functions 
+in main function. This is because apscheduler has no way to pass parameters into the functins
+'''
+
+def mp_scheduled_snap():
+    os_conn=connect_to_os()
+    snap_sched = get_snap_sched()
+    server_details = openstack_server_list(os_conn)
+    cluster = ceph_conn()[0]
+    ioctx = ceph_conn()[1]
+    with Pool(cpu_count()-1) as pool:
+        pool.starmap(create_scheduled_snap, zip(snap_sched, server_details, cluster, ioctx))
+
+def mp_general_snap():
+    os_conn=connect_to_os()
+    server_details = openstack_server_list(os_conn)
+    scheduled_servers = get_snap_sched()[1]
+    general_scheduled_servers = not_defined_servers(scheduled_servers, server_details)
+    cluster = ceph_conn()[0]
+    ioctx = ceph_conn()[1]
+    with Pool(cpu_count()-1) as pool2:
+        pool2.starmap(create_general_snap, zip(general_scheduled_servers, cluster, ioctx))
+
+
+
+'''
 mel by volat funkci create_general_snap - ale potrebuji ji jeste upravit,
 aby nevyzadovala zadny argument
 '''
-def create_general_snap_job(general_scheduled_servers):
+def create_general_snap_job():
     hour = '6,12,18'
     day_of_week = 'mon-fri'
-    scheduler_conf()
     scheduler.add_job(
-        create_general_snap, 
+        mp_general_snap, 
         'cron', 
         day_of_week='mon-fri', 
         hour='*', 
@@ -284,10 +306,9 @@ def create_general_snap_job(general_scheduled_servers):
         misfire_grace_time=600)
     scheduler.shutdown()
 
-def create_scheduled_snap_job(snap_sched, server_details):
-    scheduler_conf()
+def create_scheduled_snap_job():
     scheduler.add_job(
-        create_scheduled_snap,
+        mp_scheduled_snap,
         'cron',
         day_of_week='*',
         hour='*',
@@ -298,7 +319,6 @@ def create_scheduled_snap_job(snap_sched, server_details):
     scheduler.shutdown()    
                 
 def create_service_schedule_job():
-    scheduler_conf()
     scheduler.add_job(
         snap_sched, 
         'cron', 
@@ -322,12 +342,35 @@ def create_service_schedule_job():
     scheduler.shutdown()
 
 def main():
-    os_conn = connect_to_os()
-    s = snap_sched()[0]
-    srv = snap_sched()[1]
-    server_details = server_list(os_conn)
-    blabla(s, srv, server_details)
-    #ceph_rbd()
+    create_service_schedule_job
+    create_general_snap_job()
+    create_scheduled_snap_job()
 
 if __name__ == "__main__":
     main()
+
+
+
+''' 
+bellox is just brainstorm how to use multiprocessing for this.
+Each should be in separate function and called by apscheduler
+
+def mp_scheduled_snap():
+    os_conn=connect_to_os()
+    snap_sched = get_snap_sched()
+    server_details = openstack_server_list(os_conn)
+    cluster = ceph_conn()[0]
+    ioctx = ceph_conn()[1]
+    with Pool(cpu_count()-1) as pool:
+        pool.starmap(create_scheduled_snap, zip(snap_sched, server_details, cluster, ioctx))
+
+def mp_general_snap():
+    os_conn=connect_to_os()
+    server_details = openstack_server_list(os_conn)
+    scheduled_servers = get_snap_sched()[1]
+    general_scheduled_servers = not_defined_servers(scheduled_servers, server_details)
+    cluster = ceph_conn()[0]
+    ioctx = ceph_conn()[1]
+    with Pool(cpu_count()-1) as pool2:
+        pool2.starmap(create_general_snap, zip(general_scheduled_servers, cluster, ioctx))
+'''
