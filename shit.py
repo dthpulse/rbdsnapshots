@@ -48,12 +48,6 @@ job_defaults = {
     'coalesce': True,
     'max_instances': 600
 }
-scheduler = BackgroundScheduler(timezone='Europe/Prague')
-scheduler.configure(jobstores=jobstores, executors=executors, job_defaults=job_defaults, timezone='Europe/Prague')
-try:
-    scheduler.start()
-except:
-    print("scheduler is already running")
 
 '''
 connect to OS
@@ -201,7 +195,7 @@ def get_snap_sched():
     if not compare_result:
         shutil.copyfile(orig_yaml, used_yaml)
         scheduler.remove_all_jobs(jobstore='mysql_snap')
-        scheduler.shutdown()
+        # scheduler.shutdown()
 
     with open(used_yaml) as f:
         scheduled_servers = []
@@ -247,7 +241,7 @@ def openstack_server_list(os_conn):
     if not compare_result:
         shutil.copyfile(new_server_list, used_server_list)
         scheduler.remove_all_jobs(jobstore='mysql_snap')
-        scheduler.shutdown()
+        # scheduler.shutdown()
     
     return server_details
 
@@ -285,13 +279,18 @@ def mp_general_snap():
     with Pool(cpu_count()-1) as pool2:
         pool2.starmap(create_general_snap, zip(general_scheduled_servers, cluster, ioctx))
 
-
+def openstack_server_list_sc():
+    os_conn=connect_to_os()
+    openstack_server_list(os_conn)
 
 '''
 mel by volat funkci create_general_snap - ale potrebuji ji jeste upravit,
 aby nevyzadovala zadny argument
 '''
 def create_general_snap_job():
+    scheduler = BackgroundScheduler(timezone='Europe/Prague')
+    scheduler.configure(jobstores=jobstores, executors=executors, job_defaults=job_defaults, timezone='Europe/Prague')
+    scheduler.start()
     hour = '6,12,18'
     day_of_week = 'mon-fri'
     scheduler.add_job(
@@ -304,9 +303,12 @@ def create_general_snap_job():
         replace_existing=True, 
         id='general_snap_job',
         misfire_grace_time=600)
-    scheduler.shutdown()
+    # scheduler.shutdown()
 
 def create_scheduled_snap_job():
+    scheduler = BackgroundScheduler(timezone='Europe/Prague')
+    scheduler.configure(jobstores=jobstores, executors=executors, job_defaults=job_defaults, timezone='Europe/Prague')
+    scheduler.start()
     scheduler.add_job(
         mp_scheduled_snap,
         'cron',
@@ -316,11 +318,14 @@ def create_scheduled_snap_job():
         replace_existing=True,
         id='scheduled_snap_job',
         misfire_grace_time=600)
-    scheduler.shutdown()    
+    # scheduler.shutdown()    
                 
 def create_service_schedule_job():
+    scheduler = BackgroundScheduler(timezone='Europe/Prague')
+    scheduler.configure(jobstores=jobstores, executors=executors, job_defaults=job_defaults, timezone='Europe/Prague')
+    scheduler.start()
     scheduler.add_job(
-        snap_sched, 
+        get_snap_sched, 
         'cron', 
         day_of_week='mon-sun', 
         hour='9,11,13,15,17,19', 
@@ -330,7 +335,7 @@ def create_service_schedule_job():
         id='snap_sched',
         misfire_grace_time=600)
     scheduler.add_job(
-        server_list, 
+        openstack_server_list_sc, 
         'cron', 
         day_of_week='mon-sun', 
         hour='9,11,13,15,17,19', 
@@ -339,12 +344,15 @@ def create_service_schedule_job():
         replace_existing=True, 
         id='server_list',
         misfire_grace_time=600)
-    scheduler.shutdown()
+    # scheduler.shutdown()
 
 def main():
     create_service_schedule_job
     create_general_snap_job()
     create_scheduled_snap_job()
+    while True:
+        time.sleep(1)
+
 
 if __name__ == "__main__":
     main()
