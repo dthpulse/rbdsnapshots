@@ -259,7 +259,6 @@ def not_defined_servers(scheduled_servers, server_details):
 now include above functions in mp_scheduled_snap and mp_general_snap so we just need to call apscheduler functions 
 in main function. This is because apscheduler has no way to pass parameters into the functins
 '''
-
 def mp_scheduled_snap():
     os_conn=connect_to_os()
     snap_sched = get_snap_sched()
@@ -347,7 +346,7 @@ def create_service_schedule_job():
     # scheduler.shutdown()
 
 def main():
-    create_service_schedule_job
+    create_service_schedule_job()
     create_general_snap_job()
     create_scheduled_snap_job()
     while True:
