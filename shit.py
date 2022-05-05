@@ -48,6 +48,9 @@ job_defaults = {
     'coalesce': True,
     'max_instances': 600
 }
+scheduler = BackgroundScheduler(timezone='Europe/Prague')
+scheduler.configure(jobstores=jobstores, executors=executors, job_defaults=job_defaults, timezone='Europe/Prague')
+scheduler.start()
 
 '''
 connect to OS
@@ -287,9 +290,6 @@ mel by volat funkci create_general_snap - ale potrebuji ji jeste upravit,
 aby nevyzadovala zadny argument
 '''
 def create_general_snap_job():
-    scheduler = BackgroundScheduler(timezone='Europe/Prague')
-    scheduler.configure(jobstores=jobstores, executors=executors, job_defaults=job_defaults, timezone='Europe/Prague')
-    scheduler.start()
     hour = '6,12,18'
     day_of_week = 'mon-fri'
     scheduler.add_job(
@@ -305,9 +305,6 @@ def create_general_snap_job():
     # scheduler.shutdown()
 
 def create_scheduled_snap_job():
-    scheduler = BackgroundScheduler(timezone='Europe/Prague')
-    scheduler.configure(jobstores=jobstores, executors=executors, job_defaults=job_defaults, timezone='Europe/Prague')
-    scheduler.start()
     scheduler.add_job(
         mp_scheduled_snap,
         'cron',
@@ -320,9 +317,6 @@ def create_scheduled_snap_job():
     # scheduler.shutdown()    
                 
 def create_service_schedule_job():
-    scheduler = BackgroundScheduler(timezone='Europe/Prague')
-    scheduler.configure(jobstores=jobstores, executors=executors, job_defaults=job_defaults, timezone='Europe/Prague')
-    scheduler.start()
     scheduler.add_job(
         get_snap_sched, 
         'cron', 
