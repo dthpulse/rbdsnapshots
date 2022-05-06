@@ -24,7 +24,16 @@ from apscheduler.executors.pool import ProcessPoolExecutor
 from multiprocessing import Pool, cpu_count
 
 snapmanager_dir = '/var/lib/snapmanager'
-os.mkdir(snapmanager_dir)
+
+if cpu_count() > 1:
+    cpu_count = cpu_count() - 1
+else:
+    cpu_count = cpu_count()
+
+try:
+    os.mkdir(snapmanager_dir)
+except:
+    print('snapmanager dir %s exists' % snapmanager_dir)
 
 '''
 apscheduler settings
@@ -188,17 +197,20 @@ and the list of scheduled_servers
 def get_snap_sched():
     orig_yaml = snapmanager_dir + '/snap_sched.yml'
     used_yaml = orig_yaml + '-'
-    try:
-        file_check = used_yaml.resolve(strict=True)
-    except:
-        shutil.copyfile(orig_yaml, used_yaml)
-    finally:
-        compare_result = filecmp.cmp(orig_yaml, used_yaml, shallow=False)
+
+    if not os.path.exists(used_yaml) or not filecmp.cmp(orig_yaml, used_yaml, shallow=False):
+        shutil.copyfile(orig_yaml, used_yaml)    
+    # try:
+        # file_check = used_yaml.resolve(strict=True)
+    # except:
+        # shutil.copyfile(orig_yaml, used_yaml)
+    # finally:
+        # compare_result = filecmp.cmp(orig_yaml, used_yaml, shallow=False)
     
-    if not compare_result:
-        shutil.copyfile(orig_yaml, used_yaml)
-        scheduler.remove_all_jobs(jobstore='mysql_snap')
-        # scheduler.shutdown()
+    # if not compare_result:
+        # shutil.copyfile(orig_yaml, used_yaml)
+        # scheduler.remove_all_jobs(jobstore='mysql_snap')
+        # # scheduler.shutdown()
 
     with open(used_yaml) as f:
         scheduled_servers = []
@@ -234,17 +246,20 @@ def openstack_server_list(os_conn):
             f.write(str(line)+'\n')
         f.close()
     
-    try:
-        file_check = used_server_list.resolve(strict=True)
-    except:
-        shutil.copyfile(new_server_list, used_server_list)
-    finally:
-        compare_result = filecmp.cmp(new_server_list, used_server_list, shallow=False)
+    if not os.path.exists(used_server_list) or not filecmp.cmp(new_server_list, used_server_list, shallow=False):
+        shutil.copyfile(new_server_list, used_server_list)    
+
+    # try:
+        # file_check = used_server_list.resolve(strict=True)
+    # except:
+        # shutil.copyfile(new_server_list, used_server_list)
+    # finally:
+        # compare_result = filecmp.cmp(new_server_list, used_server_list, shallow=False)
     
-    if not compare_result:
-        shutil.copyfile(new_server_list, used_server_list)
-        scheduler.remove_all_jobs(jobstore='mysql_snap')
-        # scheduler.shutdown()
+    # if not compare_result:
+        # shutil.copyfile(new_server_list, used_server_list)
+        # scheduler.remove_all_jobs(jobstore='mysql_snap')
+        # # scheduler.shutdown()
     
     return server_details
 
@@ -268,7 +283,7 @@ def mp_scheduled_snap():
     server_details = openstack_server_list(os_conn)
     cluster = ceph_conn()[0]
     ioctx = ceph_conn()[1]
-    with Pool(cpu_count()-1) as pool:
+    with Pool(cpu_count) as pool:
         pool.starmap(create_scheduled_snap, zip(snap_sched, server_details, cluster, ioctx))
 
 def mp_general_snap():
@@ -278,7 +293,7 @@ def mp_general_snap():
     general_scheduled_servers = not_defined_servers(scheduled_servers, server_details)
     cluster = ceph_conn()[0]
     ioctx = ceph_conn()[1]
-    with Pool(cpu_count()-1) as pool2:
+    with Pool(cpu_count) as pool2:
         pool2.starmap(create_general_snap, zip(general_scheduled_servers, cluster, ioctx))
 
 def openstack_server_list_sc():
@@ -340,6 +355,8 @@ def create_service_schedule_job():
     # scheduler.shutdown()
 
 def main():
+    get_snap_sched() 
+    openstack_server_list_sc() 
     create_service_schedule_job()
     create_general_snap_job()
     create_scheduled_snap_job()
