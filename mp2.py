@@ -8,6 +8,7 @@ import multiprocessing
 def square(n, b):
 
     time.sleep(2)
+    print(type(n), type(b))
 
     return n * b
 
@@ -22,7 +23,7 @@ def forn():
     return values
 
 def fornn():
-    valuess = (100,300,500,700)
+    valuess = [100,300,500,700]
     return valuess
 
 def main():
@@ -35,14 +36,14 @@ def main():
 
     values = (2, 4, 6, 8)
 
-    with Pool(cpu_count()-15) as pool:
+    with Pool(cpu_count()) as pool:
         # pool.map(square, values)
         res = pool.starmap(square, zip(values, valuess))
         print(res)
-    with Pool(cpu_count()-15) as pool2:
-        # pool.map(square, values)
-        res2 = pool2.map(squaree, values)
-        print(res2)
+    # with Pool(cpu_count()) as pool2:
+        # # pool.map(square, values)
+        # res2 = pool2.map(squaree, values)
+        # print(res2)
     end = timer()
     print(f'elapsed time: {end - start}')
 
