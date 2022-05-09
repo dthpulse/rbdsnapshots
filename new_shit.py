@@ -200,6 +200,7 @@ def create_rbd_snapshot(volume, keep_copies, snap_name):
     date_string = now.strftime('%d%m%Y%H')
     image = rbd.Image(ioctx, 'volume-' + volume)
     image_snap_list = list(image.list_snaps())
+    snaps_delete = []
     if not image_snap_list:
         image.create_snap(snap_name + '_' + date_string)
     for image_snap in image_snap_list:
@@ -216,28 +217,6 @@ def create_rbd_snapshot(volume, keep_copies, snap_name):
         except:
             continue
     image.close()
-
-# def mp_scheduled_snap(volume, keep_copies, snap_name):
-    # now = datetime.now()
-    # date_string = now.strftime('%d%m%Y%H')
-    # image = rbd.Image(ioctx, 'volume-' + volume)
-    # image_snap_list = list(image.list_snaps())
-    # if not image_snap_list:
-        # image.create_snap(snap_name + '_' + date_string)
-    # for image_snap in image_snap_list:
-        # if snap_name in image_snap['name']:
-            # snaps_delete.append(image_snap['name'])
-        # snaps_filtered = len(snaps_delete) - int(keep_copies)
-        # try:
-            # if date_string not in image_snap['name']:
-                # image.create_snap(snap_name + '_' + date_string)
-            # if snaps_filtered > 0:
-                # del snaps_delete[snaps_filtered:]
-                # for snap in snaps_delete:
-                    # image.remove_snap(snap)
-        # except:
-            # continue
-    # image.close()
 
 def create_service_schedule_job():
     scheduler.add_job(
@@ -259,6 +238,8 @@ def create_service_schedule_job():
         misfire_grace_time=600)
 
 def main():
+    openstack_server_list()
+    get_snap_sched()
     server_details = openstack_server_list()
     snap_sched = get_snap_sched()[0]
     scheduled_servers = get_snap_sched()[1]
