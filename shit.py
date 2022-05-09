@@ -180,8 +180,8 @@ def create_scheduled_snap(snap_sched, server_details):
                         try:
                             if date_string not in image_snap['name']:
                                 image.create_snap(snap_name + '_' + date_string)
-                                if snaps_filtered > 0:
-                                    del snaps_delete[:-snaps_filtered]
+                            if snaps_filtered > 0:
+                                del snaps_delete[:-snaps_filtered]
                                 for snap in snaps_delete:
                                     image.remove_snap[image_snap_list[0][snap]]
                         except:
