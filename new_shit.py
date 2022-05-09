@@ -206,16 +206,13 @@ def create_rbd_snapshot(volume, keep_copies, snap_name):
     for image_snap in image_snap_list:
         if snap_name in image_snap['name']:
             snaps_delete.append(image_snap['name'])
-        snaps_filtered = len(snaps_delete) - int(keep_copies)
-        try:
-            if date_string not in image_snap['name']:
-                image.create_snap(snap_name + '_' + date_string)
-            if snaps_filtered > 0:
-                del snaps_delete[snaps_filtered:]
-                for snap in snaps_delete:
-                    image.remove_snap(snap)
-        except:
-            continue
+    snaps_filtered = len(snaps_delete) - int(keep_copies) + 1
+    if image_snap['name'] and date_string not in image_snap['name']:
+        image.create_snap(snap_name + '_' + date_string)
+    if snaps_filtered > 0:
+        del snaps_delete[snaps_filtered:]
+        for snap in snaps_delete:
+            image.remove_snap(snap)
     image.close()
 
 def create_service_schedule_job():
