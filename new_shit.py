@@ -72,7 +72,8 @@ def wd():
     return event_handler
 
 def on_modified(event):
-    if not filecmp.cmp('%s/server_list.txt' % snapmanager_dir, '%s/server_list.txt-' % snapmanager_dir, shallow=False):
+    if not filecmp.cmp('%s/server_list.txt' % snapmanager_dir, '%s/server_list.txt-' % snapmanager_dir, shallow=False) \
+        or not filecmp.cmp('%s/snap_sched.yml' % snapmanager_dir, '%s/snap_sched.yml-' % snapmanager_dir, shallow=False):
         for job in scheduler.get_jobs():
             job.remove()
         create_scheduled_snap(snap_sched, server_details)
