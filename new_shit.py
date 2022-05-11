@@ -16,18 +16,22 @@ import pytz
 import time
 import shutil
 import filecmp
+import logging
 from datetime import datetime
 from novaclient import client as novaclient
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.executors.pool import ProcessPoolExecutor
+from watchdog.observers import Observer
+from watchdog.events import PatternMatchingEventHandler
+
 
 snapmanager_dir = '/var/lib/snapmanager'
 
 try:
     os.mkdir(snapmanager_dir)
 except:
-    print('snapmanager dir %s exists' % snapmanager_dir)
+    pass
 
 '''
 apscheduler settings
@@ -56,6 +60,32 @@ scheduler.configure(jobstores=jobstores, executors=executors, job_defaults=job_d
 scheduler.start()
 
 '''
+watchdog takes care of watching the changes on snap_sched.yml and servers_list.txt
+if changed, DB is recreated 
+'''
+def wd():
+    patterns = ["*.yml-", "*.txt-"]
+    ignore_patterns = None
+    ignore_directories = False
+    case_sensitive = True
+    event_handler = PatternMatchingEventHandler(patterns, ignore_patterns, ignore_directories, case_sensitive)
+    return event_handler
+
+def on_modified(event):
+    if not filecmp.cmp('%s/server_list.txt' % snapmanager_dir, '%s/server_list.txt-' % snapmanager_dir, shallow=False):
+        for job in scheduler.get_jobs():
+            job.remove()
+        create_scheduled_snap(snap_sched, server_details)
+        create_general_snap(general_scheduled_servers)
+
+def wtd(event_handler):
+    event_handler.on_modified = on_modified
+    go_recursively = True
+    observer = Observer()
+    observer.schedule(event_handler, snapmanager_dir, recursive=go_recursively)
+    observer.start()
+
+'''
 connect to OS
 '''
 os_conn = novaclient.Client(version = 2,
@@ -80,29 +110,24 @@ and comparing it with new one. This function is scheduled with apscheduler to ru
 we get dict with {'server_name':'[volume1, volume2, ...]'}
 '''
 def openstack_server_list():
+    global server_details
     server_details = dict()
     servers_list = os_conn.servers.list()
     new_server_list = snapmanager_dir + '/server_list.txt'
     used_server_list = new_server_list + '-'
-
     for server in servers_list:
         volumes = []
         volumes_raw = server._info['os-extended-volumes:volumes_attached']
         for i in range(0, len(volumes_raw)):
             volumes.append(volumes_raw[i]['id'])
         server_details[server.name] = volumes
-
     with open(new_server_list, 'w') as f:
         for i in sorted(server_details):
             line=i, server_details[i]
             f.write(str(line)+'\n')
         f.close()
-
     if not os.path.exists(used_server_list) or not filecmp.cmp(new_server_list, used_server_list, shallow=False):
         shutil.copyfile(new_server_list, used_server_list)
-        for job in scheduler.get_jobs():
-            job.remove()
-
     return server_details
 
 '''
@@ -114,25 +139,24 @@ we get snap_sched dict like {'7@mon-fri@2,4':'['server1', 'server2',...]'}
 and the list of scheduled_servers
 '''
 def get_snap_sched():
+    global snap_sched
     orig_yaml = snapmanager_dir + '/snap_sched.yml'
     used_yaml = orig_yaml + '-'
-
     if not os.path.exists(used_yaml) or not filecmp.cmp(orig_yaml, used_yaml, shallow=False):
         shutil.copyfile(orig_yaml, used_yaml)
-
     with open(used_yaml) as f:
         scheduled_servers = []
         snap_sched = yaml.safe_load(f)
         for schedule, servers in snap_sched.items():
             for i in snap_sched[schedule]:
                 scheduled_servers.append(i)
-
     return snap_sched, scheduled_servers
 
 '''
 VMs not scheduled in yaml file will be backed up with general schedule
 '''
 def not_defined_servers(scheduled_servers, server_details):
+    global general_scheduled_servers
     general_scheduled_servers = {}
     for server_name,server_volumes in server_details.items():
         if server_name not in scheduled_servers:
@@ -140,32 +164,25 @@ def not_defined_servers(scheduled_servers, server_details):
     return general_scheduled_servers
 
 '''
-using librbd we're connecting to the Ceph and creating snapshots
+creates scheduled snaps, servers defined in snap_sched.yml
 '''
 def create_scheduled_snap(snap_sched, server_details):
-    week = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
-    day_of_week_to_snap = []
-    hours_to_snap = []
-    today = datetime.today().strftime('%a')
-    hour = datetime.now().strftime('%-H')
-
     for schedule, servers in snap_sched.items():
         scheduled_hours = schedule.split('@', 2)[2]
         scheduled_days  = schedule.split('@', 2)[1]
         keep_copies     = schedule.split('@', 2)[0]
-
         if (',' in scheduled_hours or '-' in scheduled_hours) and ('-' in scheduled_days or ',' in scheduled_days):
             snap_name = 'hourly'
         elif '-' not in scheduled_days and ',' not in scheduled_days:
             snap_name = 'weekly'
         elif ',' not in scheduled_hours and '-' not in scheduled_hours:
             snap_name = 'daily'
-
         for server in servers:
             for volume in server_details[server]:
                     scheduler.add_job(
                         create_rbd_snapshot,
                         'cron',
+                        name='%s-%s' % (server, volume),
                         day_of_week=scheduled_days,
                         hour=scheduled_hours,
                         jobstore='mysql_snap',
@@ -174,18 +191,19 @@ def create_scheduled_snap(snap_sched, server_details):
                         misfire_grace_time=600,
                         args=[volume, keep_copies, snap_name])
 
+'''
+creates general snaps, for all servers not defined in snap_sched.yml
+'''
 def create_general_snap(general_scheduled_servers):
     keep_copies = '5'
     snap_name = 'general'
-    day_of_week_to_snap = 'mon,tue,wed,thu,fri'
     hours_to_snap = '6,11,15,19'
-    today = datetime.today().strftime('%a')
-    hour = datetime.now().strftime('%H')
     for server, volumes in general_scheduled_servers.items():
         for volume in volumes:
             scheduler.add_job(
             create_rbd_snapshot,
             'cron',
+            name='%s-%s' % (server, volume),
             day_of_week='mon-fri',
             hour=hours_to_snap,
             minute='15',
@@ -194,7 +212,10 @@ def create_general_snap(general_scheduled_servers):
             id='%s-%s' % (server, volume),
             misfire_grace_time=600,
             args=[volume, keep_copies, snap_name]) 
-            
+
+'''
+using librbd we're connecting to the Ceph and creating snapshots
+'''          
 def create_rbd_snapshot(volume, keep_copies, snap_name):           
     now = datetime.now()
     date_string = now.strftime('%d%m%Y%H')
@@ -235,6 +256,12 @@ def create_service_schedule_job():
         misfire_grace_time=600)
 
 def main():
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s - %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S',
+                        filename='/var/log/snapmanager.log')
+    event_handler=wd()
+    wtd(event_handler)
     openstack_server_list()
     get_snap_sched()
     server_details = openstack_server_list()
