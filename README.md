@@ -22,6 +22,20 @@ Script requires one file */var/lib/snapmanager/snap_sched.yml*. It reads schedul
 
 Snapshot name is the basename of a Snapshot copy set, for example, hourly. 
 
+Schedule specification is made up of count[@day_list] [@hour_list].
+
+Example of snap_sched.yml:
+
+```
+---
+7@mon-fri@1,3,15,20:
+    - server1.domain.com
+    - server2.domain.com
+4@mon@13:
+    - server1.domain.com
+7@mon-sun:14
+    - server1.domain.com
+```
 
 *count* is the number of Snapshot copies to retain for this Snapshot copy set. A zero (0) in this field means no new instance of this Snapshot copy will be created.
 
