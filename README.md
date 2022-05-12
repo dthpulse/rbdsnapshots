@@ -82,9 +82,9 @@ required arguments:
                         path to ceph config file
   --ceph-pool CEPH_POOL
                         ceph pool with RBD images
+  --os-conf OS_CONF     path to OpenStack config
 
 OM TAT SAT
-
 ```
 
 Log is in */var/log/snapmanager.log*

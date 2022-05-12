@@ -18,6 +18,7 @@ import shutil
 import filecmp
 import logging
 import argparse
+import pathlib
 from datetime import datetime
 from novaclient import client as novaclient
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -26,46 +27,44 @@ from apscheduler.executors.pool import ProcessPoolExecutor
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 
-
-'''
-gets snapmanager arguments
-'''
 parser=argparse.ArgumentParser(
     description='''snapmanager creates, rotate snapshots on RBD images''',
     epilog='''OM TAT SAT''')
 parser.add_argument(
     '--enable-general-snapshots', 
     action='store_true', 
-    help='enable general snapshots creation for all VMs not specified in snap_sched.yml', 
+    help='enable general snapshots creation for all VMs not specified in snap_sched.yml',
     required=False)
-parser.add_argument( 
-    '--force-general-snapshots',
-    action='store_true',
-    help='force creates snapshots on all VMs using general snapshot schedule. Can be run only if general snapshots are enabled.',
-    required=False) 
+parser.add_argument(
+    '--force-general-snapshots', 
+    action='store_true', 
+    help='force creates snapshots on all VMs using general snapshot schedule. Can be run only if general snapshots are enabled.', 
+    required=False)
 parser.add_argument(
     '--force-scheduled-snapshots',
-    action='store_true',
-    help='force creates snapshots on all VMs that are scheduled for snapshots.',
+    action='store_true', 
+    help='force creates snapshots on all VMs that are scheduled for snapshots.', 
     required=False)
-required_args=parser.add_argument_group('required arguments')
+required_args = parser.add_argument_group('required arguments')
 required_args.add_argument(
-    '--ceph-conf',
-    action='store_true',
-    type=str,
-    nargs=1,
-    help='path to ceph config file',
+    '--ceph-conf', 
+    type=str, 
+    help='path to ceph config file', 
     required=True)
 required_args.add_argument(
-    '--ceph-pool',
-    action='store_true',
-    type=str,
-    nargs=1,
-    help='ceph pool with RBD images',
+    '--ceph-pool', 
+    type=str, 
+    help='ceph pool with RBD images', 
+    required=True)
+required_args.add_argument(
+    '--os-conf', 
+    type=str, 
+    help='path to OpenStack config', 
     required=True)
 args=parser.parse_args()
 
 snapmanager_dir = '/var/lib/snapmanager'
+OS_CONFIG = args.os_conf
 ceph_conf = args.ceph_conf
 ceph_pool = args.ceph_pool
 
@@ -77,6 +76,7 @@ except:
 '''
 apscheduler settings
 '''
+
 MYSQL_SCHEDULED_SNAPS = {
     "url": "mysql+pymysql://localhost:3306/scheduled_snaps"
 }
@@ -103,16 +103,29 @@ scheduler = BackgroundScheduler(timezone='Europe/Prague')
 scheduler.configure(jobstores=jobstores, executors=executors, job_defaults=job_defaults, timezone='Europe/Prague')
 scheduler.start()
 
-'''
+''' 
 connect to OS
 '''
+def get_config():
+    conf        = {}
+    config_file = pathlib.Path(OS_CONFIG)
+    with config_file.open() as cfile:
+        lines = [line for line in cfile.readlines() if line.startswith('export')]
+        for line in lines:
+            newline    = line.rstrip('\n').lstrip('export ')
+            key, value = newline.split('=')
+            conf[key]  = value
+    return conf
+
+os_config = get_config()
 os_conn = novaclient.Client(version = 2,
-    username = 'foremannub',
-    password = 'shei8rooReecieL5',
-    project_name = 'prod',
-    auth_url = 'http://openstack2.prod.nub:5000/v3',
-    user_domain_id = 'b2571699c2044245ac79c60e7c6ff09d',
-    project_domain_id = 'b2571699c2044245ac79c60e7c6ff09d')
+                auth_url          = os_config['OS_AUTH_URL'],
+                project_name      = os_config['OS_PROJECT_NAME'],
+                username          = os_config['OS_USERNAME'],
+                password          = os_config['OS_PASSWORD'],
+                user_domain_id    = os_config['OS_USER_DOMAIN_ID'],
+                project_domain_id = os_config['OS_PROJECT_DOMAIN_ID']
+                )
 
 '''
 connect to Ceph
@@ -122,7 +135,7 @@ cluster.connect()
 ioctx = cluster.open_ioctx(ceph_pool)
 
 '''
-forcing snap creation manualy 
+forcing snap creation manualy
 '''
 def force_snapshots():
     force_jobstores = []
@@ -132,11 +145,11 @@ def force_snapshots():
         force_jobstores.append('mysql_scheduled_snaps')
     elif args.force_general_snapshots and args.force_scheduled_snapshots and args.enable_general_snapshots:
         force_jobstores = ['mysql_general_snaps', 'mysql_scheduled_snaps']
-    else:
+    elif args.force_general_snapshots and not args.enable_general_snapshots:
         err_msg = "Error: Can't create general snapshots - missing option '--enable-general-snapshots'"
         logging.error(err_msg)
         sys.exit(err_msg)
-    
+
     if force_jobstores:
         for force_jobstore in force_jobstores:
             logging.info("Manually triggered snapshots for jobstore %s" % force_jobstore)
@@ -148,7 +161,7 @@ def force_snapshots():
 
 '''
 watchdog takes care of watching the changes on snap_sched.yml and servers_list.txt
-if changed, DB is recreated 
+if changed, DB is recreated
 '''
 def wd():
     patterns = ["*.yml-", "*.txt-"]
@@ -288,12 +301,12 @@ def create_general_snap(general_scheduled_servers):
             replace_existing=True,
             id='%s-%s' % (server, volume),
             misfire_grace_time=600,
-            args=[volume, keep_copies, snap_name]) 
+            args=[volume, keep_copies, snap_name])
 
 '''
 using librbd we're connecting to the Ceph and creating snapshots
-'''          
-def create_rbd_snapshot(volume, keep_copies, snap_name):           
+'''
+def create_rbd_snapshot(volume, keep_copies, snap_name):
     if int(keep_copies) != 0:
         now = datetime.now()
         date_string = now.strftime('%d%m%Y%H')
@@ -359,6 +372,6 @@ def main():
     except KeyboardInterrupt:
         observer.stop()
         observer.join()
-     
+
 if __name__ == '__main__':
     main()
