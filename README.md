@@ -45,7 +45,8 @@ By default only scheduled snapshots are triggered.
 
 ```
 usage: snapmanager.py [-h] [--enable-general-snapshots] [--force-general-snapshots]
-         [--force-scheduled-snapshots]
+         [--force-scheduled-snapshots] --ceph-conf CEPH_CONF --ceph-pool
+         CEPH_POOL
 
 snapmanager creates, rotate snapshots on RBD images
 
@@ -61,6 +62,15 @@ optional arguments:
   --force-scheduled-snapshots
                         force creates snapshots on all VMs that are scheduled
                         for snapshots.
+
+required arguments:
+  --ceph-conf CEPH_CONF
+                        path to ceph config file
+  --ceph-pool CEPH_POOL
+                        ceph pool with RBD images
+
+OM TAT SAT
+
 ```
 
 Log is in */var/log/snapmanager.log*
