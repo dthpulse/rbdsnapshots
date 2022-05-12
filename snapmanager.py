@@ -17,6 +17,7 @@ import time
 import shutil
 import filecmp
 import logging
+import argparse
 from datetime import datetime
 from novaclient import client as novaclient
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -24,6 +25,13 @@ from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.executors.pool import ProcessPoolExecutor
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
+
+parser=argparse.ArgumentParser(description='''snapmanager creates, rotate snapshots on RBD images''', epilog='''OM TAT SAT''')
+parser.add_argument('--enable-general-snapshots', action='store_true', help='enable general snapshots creation for all VMs not specified in snap_sched.yml')
+parser.add_argument( '--force-general-snapshots', action='store_true', help='force creates snapshots on all VMs using general snapshot schedule. Can be run only if general snapshots are enabled.') 
+parser.add_argument('--force-scheduled-snapshots', action='store_true', help='force creates snapshots on all VMs that are scheduled for snapshots.')
+args=parser.parse_args()
+
 
 
 snapmanager_dir = '/var/lib/snapmanager'
@@ -63,6 +71,32 @@ scheduler = BackgroundScheduler(timezone='Europe/Prague')
 scheduler.configure(jobstores=jobstores, executors=executors, job_defaults=job_defaults, timezone='Europe/Prague')
 scheduler.start()
 
+
+'''
+forcing snap creation manualy 
+'''
+def force_snapshots():
+    force_jobstores = []
+    if args.force_general_snapshots and args.enable_general_snapshots:
+        force_jobstores.append('mysql_general_snaps')
+    elif args.force_scheduled_snapshots:
+        force_jobstores.append('mysql_scheduled_snaps')
+    elif args.force_general_snapshots and args.force_scheduled_snapshots and args.enable_general_snapshots:
+        force_jobstores = ['mysql_general_snaps', 'mysql_scheduled_snaps']
+    else:
+        err_msg = "Error: Can't create general snapshots - missing option '--enable-general-snapshots'"
+        logging.error(err_msg)
+        sys.exit(err_msg)
+    
+    if force_jobstores:
+        for force_jobstore in force_jobstores:
+            logging.info("Manually triggered snapshots for jobstore %s" % force_jobstore)
+            for job in scheduler.get_jobs(force_jobstore):
+                job.modify(next_run_time=datetime.now())
+                time.sleep(2)
+        time.sleep(5)
+        sys.exit()
+
 '''
 watchdog takes care of watching the changes on snap_sched.yml and servers_list.txt
 if changed, DB is recreated 
@@ -77,12 +111,13 @@ def wd():
 
 def on_modified(event):
     if not filecmp.cmp('%s/server_list.txt' % snapmanager_dir, '%s/server_list.txt-' % snapmanager_dir, shallow=False):
-        for job in scheduler.get_jobs('mysql_general_snaps'):
-            job.remove()
+        if args.enable_general_snapshots:
+            for job in scheduler.get_jobs('mysql_general_snaps'):
+                job.remove()
+            create_general_snap(general_scheduled_servers)
         for job in scheduler.get_jobs('mysql_scheduled_snaps'):
             job.remove()
         create_scheduled_snap(snap_sched, server_details)
-        create_general_snap(general_scheduled_servers)
     if not filecmp.cmp('%s/snap_sched.yml' % snapmanager_dir, '%s/snap_sched.yml-' % snapmanager_dir, shallow=False):
         for job in scheduler.get_jobs('mysql_scheduled_snaps'):
             job.remove()
@@ -283,7 +318,9 @@ def main():
     general_scheduled_servers = not_defined_servers(scheduled_servers, server_details)
     create_service_schedule_job()
     create_scheduled_snap(snap_sched, server_details)
-    create_general_snap(general_scheduled_servers)
+    if args.enable_general_snapshots:
+        create_general_snap(general_scheduled_servers)
+    force_snapshots()
 
     try:
         while True:
@@ -291,6 +328,6 @@ def main():
     except KeyboardInterrupt:
         observer.stop()
         observer.join()
-        
+     
 if __name__ == '__main__':
     main()
