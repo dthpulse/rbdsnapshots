@@ -1,12 +1,10 @@
-{toc}
+# Snapmanager for the OpenStack VMs with Ceph RBD 
 
-h1. Snapmanager
-
-h2. Describtion
+## Describtion
 
 Managing snapshots of OpenStack VMs on Ceph RBD images.  
 
-h2. Requirements
+## Requirements
 
 - Access to OpenStack and Ceph
 - mysql DB
@@ -18,13 +16,12 @@ h2. Requirements
   - watchdog
   - apscheduler
 
-h2. How it works
+## How it works
 
 Script requires one file */var/lib/snapmanager/snap_sched.yml*. It reads schedule and retention for the OpenStack VMs and creates scheduled jobs based on it stored in the MySQL DB. For the VMs not defined in this file general snapshot retention will be used. 
 
 Snapshot name is the basename of a Snapshot copy set, for example, hourly. 
 
-Schedule spec is made up of count[@day_list] [@hour_list].
 
 *count* is the number of Snapshot copies to retain for this Snapshot copy set. A zero (0) in this field means no new instance of this Snapshot copy will be created.
 
