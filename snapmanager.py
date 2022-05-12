@@ -26,16 +26,44 @@ from apscheduler.executors.pool import ProcessPoolExecutor
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 
-parser=argparse.ArgumentParser(description='''snapmanager creates, rotate snapshots on RBD images''', epilog='''OM TAT SAT''')
-parser.add_argument('--enable-general-snapshots', action='store_true', help='enable general snapshots creation for all VMs not specified in snap_sched.yml', required=False)
-parser.add_argument( '--force-general-snapshots', action='store_true', help='force creates snapshots on all VMs using general snapshot schedule. Can be run only if general snapshots are enabled.', required=False) 
-parser.add_argument('--force-scheduled-snapshots', action='store_true', help='force creates snapshots on all VMs that are scheduled for snapshots.', required=False)
+
+'''
+gets snapmanager arguments
+'''
+parser=argparse.ArgumentParser(
+    description='''snapmanager creates, rotate snapshots on RBD images''',
+    epilog='''OM TAT SAT''')
+parser.add_argument(
+    '--enable-general-snapshots', 
+    action='store_true', 
+    help='enable general snapshots creation for all VMs not specified in snap_sched.yml', 
+    required=False)
+parser.add_argument( 
+    '--force-general-snapshots',
+    action='store_true',
+    help='force creates snapshots on all VMs using general snapshot schedule. Can be run only if general snapshots are enabled.',
+    required=False) 
+parser.add_argument(
+    '--force-scheduled-snapshots',
+    action='store_true',
+    help='force creates snapshots on all VMs that are scheduled for snapshots.',
+    required=False)
 required_args=parser.add_argument_group('required arguments')
-required_args.add_argument('--ceph-conf', action='store_true', type=str, nargs=1, help='path to ceph config file', required=True)
-required_args.add_argument('--ceph-pool', action='store_true', type=str, nargs=1, help='ceph pool with RBD images', required=True)
+required_args.add_argument(
+    '--ceph-conf',
+    action='store_true',
+    type=str,
+    nargs=1,
+    help='path to ceph config file',
+    required=True)
+required_args.add_argument(
+    '--ceph-pool',
+    action='store_true',
+    type=str,
+    nargs=1,
+    help='ceph pool with RBD images',
+    required=True)
 args=parser.parse_args()
-
-
 
 snapmanager_dir = '/var/lib/snapmanager'
 ceph_conf = args.ceph_conf
@@ -49,7 +77,6 @@ except:
 '''
 apscheduler settings
 '''
-
 MYSQL_SCHEDULED_SNAPS = {
     "url": "mysql+pymysql://localhost:3306/scheduled_snaps"
 }
