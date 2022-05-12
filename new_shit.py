@@ -37,14 +37,18 @@ except:
 apscheduler settings
 '''
 
-MYSQL_SNAP = {
-    "url": "mysql+pymysql://localhost:3306/denis"
+MYSQL_SCHEDULED_SNAPS = {
+    "url": "mysql+pymysql://localhost:3306/scheduled_snaps"
+}
+MYSQL_GENERAL_SNAPS = {
+    "url": "mysql+pymysql://localhost:3306/general_snaps"
 }
 MYSQL_SERVICE = {
-    "url": "mysql+pymysql://localhost:3306/janicka"
+    "url": "mysql+pymysql://localhost:3306/service"
 }
 jobstores = {
-    'mysql_snap': SQLAlchemyJobStore(**MYSQL_SNAP),
+    'mysql_scheduled_snaps': SQLAlchemyJobStore(**MYSQL_SCHEDULED_SNAPS),
+    'mysql_general_snaps': SQLAlchemyJobStore(**MYSQL_GENERAL_SNAPS),
     'mysql_service': SQLAlchemyJobStore(**MYSQL_SERVICE)
 }
 executors = {
@@ -72,12 +76,17 @@ def wd():
     return event_handler
 
 def on_modified(event):
-    if not filecmp.cmp('%s/server_list.txt' % snapmanager_dir, '%s/server_list.txt-' % snapmanager_dir, shallow=False) \
-        or not filecmp.cmp('%s/snap_sched.yml' % snapmanager_dir, '%s/snap_sched.yml-' % snapmanager_dir, shallow=False):
-        for job in scheduler.get_jobs():
+    if not filecmp.cmp('%s/server_list.txt' % snapmanager_dir, '%s/server_list.txt-' % snapmanager_dir, shallow=False):
+        for job in scheduler.get_jobs('mysql_general_snaps'):
+            job.remove()
+        for job in scheduler.get_jobs('mysql_scheduled_snaps'):
             job.remove()
         create_scheduled_snap(snap_sched, server_details)
         create_general_snap(general_scheduled_servers)
+    if not filecmp.cmp('%s/snap_sched.yml' % snapmanager_dir, '%s/snap_sched.yml-' % snapmanager_dir, shallow=False):
+        for job in scheduler.get_jobs('mysql_scheduled_snaps'):
+            job.remove()
+        create_scheduled_snap(snap_sched, server_details)
 
 def wtd(event_handler):
     event_handler.on_modified = on_modified
@@ -186,7 +195,7 @@ def create_scheduled_snap(snap_sched, server_details):
                         name='%s-%s' % (server, volume),
                         day_of_week=scheduled_days,
                         hour=scheduled_hours,
-                        jobstore='mysql_snap',
+                        jobstore='mysql_scheduled_snaps',
                         replace_existing=True,
                         id='%s-%s' % (server, volume),
                         misfire_grace_time=600,
@@ -208,7 +217,7 @@ def create_general_snap(general_scheduled_servers):
             day_of_week='mon-fri',
             hour=hours_to_snap,
             minute='15',
-            jobstore='mysql_snap',
+            jobstore='mysql_general_snaps',
             replace_existing=True,
             id='%s-%s' % (server, volume),
             misfire_grace_time=600,
@@ -218,24 +227,25 @@ def create_general_snap(general_scheduled_servers):
 using librbd we're connecting to the Ceph and creating snapshots
 '''          
 def create_rbd_snapshot(volume, keep_copies, snap_name):           
-    now = datetime.now()
-    date_string = now.strftime('%d%m%Y%H')
-    image = rbd.Image(ioctx, 'volume-' + volume)
-    image_snap_list = list(image.list_snaps())
-    snaps_delete = []
-    if not image_snap_list:
-        image.create_snap(snap_name + '_' + date_string)
-    for image_snap in image_snap_list:
-        if snap_name in image_snap['name']:
-            snaps_delete.append(image_snap['name'])
-    snaps_filtered = len(snaps_delete) - int(keep_copies) + 1
-    if image_snap['name'] and date_string not in image_snap['name']:
-        image.create_snap(snap_name + '_' + date_string)
-    if snaps_filtered > 0:
-        del snaps_delete[snaps_filtered:]
-        for snap in snaps_delete:
-            image.remove_snap(snap)
-    image.close()
+    if int(keep_copies) != 0:
+        now = datetime.now()
+        date_string = now.strftime('%d%m%Y%H')
+        image = rbd.Image(ioctx, 'volume-' + volume)
+        image_snap_list = list(image.list_snaps())
+        snaps_delete = []
+        if not image_snap_list:
+            image.create_snap(snap_name + '_' + date_string)
+        for image_snap in image_snap_list:
+            if snap_name in image_snap['name']:
+                snaps_delete.append(image_snap['name'])
+        snaps_filtered = len(snaps_delete) - int(keep_copies) + 1
+        if image_snap['name'] and date_string not in image_snap['name']:
+            image.create_snap(snap_name + '_' + date_string)
+        if snaps_filtered > 0:
+            del snaps_delete[snaps_filtered:]
+            for snap in snaps_delete:
+                image.remove_snap(snap)
+        image.close()
 
 def create_service_schedule_job():
     scheduler.add_job(
