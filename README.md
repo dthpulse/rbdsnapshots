@@ -41,4 +41,26 @@ It's usign 3 different databases according schedule type:
 - *scheduled_snaps* for jobs based on definitions in the snap_sched.yml file
 - *general_snaps* for jobs which scheduling is not defined in snap_sched.yml file
 
+By default only scheduled snapshots are triggered.
+
+```
+usage: snapmanager.py [-h] [--enable-general-snapshots] [--force-general-snapshots]
+         [--force-scheduled-snapshots]
+
+snapmanager creates, rotate snapshots on RBD images
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --enable-general-snapshots
+                        enable general snapshots creation for all VMs not
+                        specified in snap_sched.yml
+  --force-general-snapshots
+                        force creates snapshots on all VMs using general
+                        snapshot schedule. Can be run only if general
+                        snapshots are enabled.
+  --force-scheduled-snapshots
+                        force creates snapshots on all VMs that are scheduled
+                        for snapshots.
+```
+
 Log is in */var/log/snapmanager.log*
