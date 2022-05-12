@@ -94,6 +94,7 @@ def wtd(event_handler):
     observer = Observer()
     observer.schedule(event_handler, snapmanager_dir, recursive=go_recursively)
     observer.start()
+    return observer
 
 '''
 connect to OS
@@ -194,7 +195,7 @@ def create_scheduled_snap(snap_sched, server_details):
                         'cron',
                         name='%s-%s' % (server, volume),
                         day_of_week=scheduled_days,
-                        hour=scheduled_hours,
+                        hour='%s' % scheduled_hours,
                         jobstore='mysql_scheduled_snaps',
                         replace_existing=True,
                         id='%s-%s' % (server, volume),
@@ -272,6 +273,7 @@ def main():
                         datefmt='%Y-%m-%d %H:%M:%S',
                         filename='/var/log/snapmanager.log')
     event_handler=wd()
+    observer=wtd(event_handler)
     wtd(event_handler)
     openstack_server_list()
     get_snap_sched()
@@ -283,8 +285,12 @@ def main():
     create_scheduled_snap(snap_sched, server_details)
     create_general_snap(general_scheduled_servers)
 
-    while True:
-        time.sleep(1)
-
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        observer.stop()
+        observer.join()
+        
 if __name__ == '__main__':
     main()

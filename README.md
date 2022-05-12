@@ -27,7 +27,7 @@ Snapshot name is the basename of a Snapshot copy set, for example, hourly.
 
 *@day_list* is a comma-separated list that specifies the days on which a new Snapshot copy for this set is created. Valid entries are mon tue wed thu fri sat sun. They are not case-sensitive. You can specify a range using a dash (-), for example, mon-fri.
 
-*@hour_list* specifies the hours at which a new Snapshot copy is created for this set. Valid entries are whole numbers from 0 to 23. You must use a comma-separated list, for example, 7, 19, 21, 23. 
+*@hour_list* specifies the hours at which a new Snapshot copy is created for this set. Valid entries are whole numbers from 0 to 23. You must use a comma-separated list, for example, 7, 19, 21, 23 or range, for example 7-19. It's cron based, indexing from 0. 
 
 Snapmanager is taking list of VMs and their volumes from OpenStack periodically (every 3h by default) and keeps the list in */var/lib/snapmanager/server_list.txt*.
 
