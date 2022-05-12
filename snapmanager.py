@@ -27,14 +27,19 @@ from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 
 parser=argparse.ArgumentParser(description='''snapmanager creates, rotate snapshots on RBD images''', epilog='''OM TAT SAT''')
-parser.add_argument('--enable-general-snapshots', action='store_true', help='enable general snapshots creation for all VMs not specified in snap_sched.yml')
-parser.add_argument( '--force-general-snapshots', action='store_true', help='force creates snapshots on all VMs using general snapshot schedule. Can be run only if general snapshots are enabled.') 
-parser.add_argument('--force-scheduled-snapshots', action='store_true', help='force creates snapshots on all VMs that are scheduled for snapshots.')
+parser.add_argument('--enable-general-snapshots', action='store_true', help='enable general snapshots creation for all VMs not specified in snap_sched.yml', required=False)
+parser.add_argument( '--force-general-snapshots', action='store_true', help='force creates snapshots on all VMs using general snapshot schedule. Can be run only if general snapshots are enabled.', required=False) 
+parser.add_argument('--force-scheduled-snapshots', action='store_true', help='force creates snapshots on all VMs that are scheduled for snapshots.', required=False)
+required_args=parser.add_argument_group('required arguments')
+required_args.add_argument('--ceph-conf', action='store_true', type=str, nargs=1, help='path to ceph config file', required=True)
+required_args.add_argument('--ceph-pool', action='store_true', type=str, nargs=1, help='ceph pool with RBD images', required=True)
 args=parser.parse_args()
 
 
 
 snapmanager_dir = '/var/lib/snapmanager'
+ceph_conf = args.ceph_conf
+ceph_pool = args.ceph_pool
 
 try:
     os.mkdir(snapmanager_dir)
@@ -71,6 +76,23 @@ scheduler = BackgroundScheduler(timezone='Europe/Prague')
 scheduler.configure(jobstores=jobstores, executors=executors, job_defaults=job_defaults, timezone='Europe/Prague')
 scheduler.start()
 
+'''
+connect to OS
+'''
+os_conn = novaclient.Client(version = 2,
+    username = 'foremannub',
+    password = 'shei8rooReecieL5',
+    project_name = 'prod',
+    auth_url = 'http://openstack2.prod.nub:5000/v3',
+    user_domain_id = 'b2571699c2044245ac79c60e7c6ff09d',
+    project_domain_id = 'b2571699c2044245ac79c60e7c6ff09d')
+
+'''
+connect to Ceph
+'''
+cluster = rados.Rados(conffile=ceph_conf)
+cluster.connect()
+ioctx = cluster.open_ioctx(ceph_pool)
 
 '''
 forcing snap creation manualy 
@@ -130,24 +152,6 @@ def wtd(event_handler):
     observer.schedule(event_handler, snapmanager_dir, recursive=go_recursively)
     observer.start()
     return observer
-
-'''
-connect to OS
-'''
-os_conn = novaclient.Client(version = 2,
-    username = 'foremannub',
-    password = 'shei8rooReecieL5',
-    project_name = 'prod',
-    auth_url = 'http://openstack2.prod.nub:5000/v3',
-    user_domain_id = 'b2571699c2044245ac79c60e7c6ff09d',
-    project_domain_id = 'b2571699c2044245ac79c60e7c6ff09d')
-
-'''
-connect to Ceph
-'''
-cluster = rados.Rados(conffile='/etc/ceph/ceph.conf')
-cluster.connect()
-ioctx = cluster.open_ioctx('op2_volumes_ssd')
 
 '''
 get server list with IDs and volumes IDs from OpenStack
