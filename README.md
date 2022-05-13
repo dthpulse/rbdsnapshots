@@ -12,9 +12,11 @@ Managing snapshots of OpenStack VMs on Ceph RBD images.
 - extra python modules
   - rbd
   - Rados
-  - novaclient
-  - watchdog
+  - python-novaclient
   - apscheduler
+  - watchdog
+  - sqlalchemy
+  - pymysql
 
 ## How it works
 
