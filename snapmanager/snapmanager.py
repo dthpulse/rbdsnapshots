@@ -320,16 +320,18 @@ def create_rbd_snapshot(volume, keep_copies, snap_name):
         now = datetime.now()
         date_string = now.strftime('%d%m%Y%H')
         image = rbd.Image(ioctx, 'volume-' + volume)
-        image_snap_list = list(image.list_snaps())
         snaps_delete = []
         if not image_snap_list:
             image.create_snap(snap_name + '_' + date_string)
+        image_snap_list = list(image.list_snaps())
         for image_snap in image_snap_list:
             if snap_name in image_snap['name']:
                 snaps_delete.append(image_snap['name'])
         snaps_filtered = len(snaps_delete) - int(keep_copies) + 1
         if image_snap['name'] and date_string not in image_snap['name']:
             image.create_snap(snap_name + '_' + date_string)
+        if args.force_general_snapshots or args.force_scheduled_snapshots:
+            image.create_snap(snap_name + '_' + 'manual_' + date_string)
         if snaps_filtered > 0:
             del snaps_delete[snaps_filtered:]
             for snap in snaps_delete:
