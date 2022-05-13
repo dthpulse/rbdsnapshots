@@ -177,18 +177,13 @@ def wd():
     return event_handler
 
 def on_modified(event):
-    if not filecmp.cmp('%s/server_list.txt' % snapmanager_dir, '%s/server_list.txt-' % snapmanager_dir, shallow=False):
-        if args.enable_general_snapshots:
-            for job in scheduler.get_jobs('mysql_general_snaps'):
-                job.remove()
-            create_general_snap(general_scheduled_servers)
-        for job in scheduler.get_jobs('mysql_scheduled_snaps'):
+    if args.enable_general_snapshots:
+        for job in scheduler.get_jobs('mysql_general_snaps'):
             job.remove()
-        create_scheduled_snap(snap_sched, server_details)
-    if not filecmp.cmp('%s/snap_sched.yml' % snapmanager_dir, '%s/snap_sched.yml-' % snapmanager_dir, shallow=False):
-        for job in scheduler.get_jobs('mysql_scheduled_snaps'):
-            job.remove()
-        create_scheduled_snap(snap_sched, server_details)
+        create_general_snap(general_scheduled_servers)
+    for job in scheduler.get_jobs('mysql_scheduled_snaps'):
+        job.remove()
+    create_scheduled_snap(snap_sched, server_details)
 
 def wtd(event_handler):
     event_handler.on_modified = on_modified
