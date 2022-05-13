@@ -273,18 +273,22 @@ def create_scheduled_snap(snap_sched, server_details):
         elif ',' not in scheduled_hours and '-' not in scheduled_hours:
             snap_name = 'daily'
         for server in servers:
-            for volume in server_details[server]:
-                    scheduler.add_job(
-                        create_rbd_snapshot,
-                        'cron',
-                        name='%s-%s' % (server, volume),
-                        day_of_week=scheduled_days,
-                        hour='%s' % scheduled_hours,
-                        jobstore='mysql_scheduled_snaps',
-                        replace_existing=True,
-                        id='%s-%s' % (server, volume),
-                        misfire_grace_time=600,
-                        args=[volume, keep_copies, snap_name])
+            try:
+                for volume in server_details[server]:
+                        scheduler.add_job(
+                            create_rbd_snapshot,
+                            'cron',
+                            name='%s-%s-%s' % (server, volume, snap_name),
+                            day_of_week=scheduled_days,
+                            hour='%s' % scheduled_hours,
+                            jobstore='mysql_scheduled_snaps',
+                            replace_existing=True,
+                            id='%s-%s-%s' % (server, volume, snap_name),
+                            misfire_grace_time=600,
+                            args=[volume, keep_copies, snap_name])
+            except:
+                logging.error("Error: failed to add schedule for VM %s volume %s" % (server, volume))
+                continue
 
 '''
 creates general snaps, for all servers not defined in snap_sched.yml
