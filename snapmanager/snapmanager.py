@@ -273,6 +273,8 @@ def create_scheduled_snap(snap_sched, server_details):
         elif ',' not in scheduled_hours and '-' not in scheduled_hours:
             snap_name = 'daily'
         for server in servers:
+            if '_' in server:
+                server = server.split('_', 1)[0]
             try:
                 for volume in server_details[server]:
                         scheduler.add_job(
@@ -298,6 +300,8 @@ def create_general_snap(general_scheduled_servers):
     snap_name = 'general'
     hours_to_snap = '6,11,15,19'
     for server, volumes in general_scheduled_servers.items():
+        if '_' in server:
+            server = server.split('_', 1)[0]
         for volume in volumes:
             scheduler.add_job(
             create_rbd_snapshot,
