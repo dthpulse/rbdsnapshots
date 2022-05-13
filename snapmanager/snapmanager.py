@@ -2,7 +2,12 @@
 
 '''
 use mysql;
+
+mariadb:
+ALTER USER 'root'@'localhost' IDENTIFIED VIA mysql_native_password USING PASSWORD('');
+other:
 UPDATE user SET plugin='mysql_native_password' WHERE User='root';
+
 FLUSH PRIVILEGES;
 exit;
 '''
