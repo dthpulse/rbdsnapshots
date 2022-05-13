@@ -325,9 +325,10 @@ def create_rbd_snapshot(volume, keep_copies, snap_name):
         date_string = now.strftime('%d%m%Y%H')
         image = rbd.Image(ioctx, 'volume-' + volume)
         snaps_delete = []
+        image_snap_list = list(image.list_snaps())
         if not image_snap_list:
             image.create_snap(snap_name + '_' + date_string)
-        image_snap_list = list(image.list_snaps())
+            image_snap_list = list(image.list_snaps())
         for image_snap in image_snap_list:
             if snap_name in image_snap['name']:
                 snaps_delete.append(image_snap['name'])
