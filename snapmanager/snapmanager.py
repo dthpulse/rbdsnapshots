@@ -179,10 +179,21 @@ def wd():
 def on_modified(event):
     if args.enable_general_snapshots:
         for job in scheduler.get_jobs('mysql_general_snaps'):
-            job.remove()
+            try:
+                job.remove()
+            except LookupError:
+                continue
+            except NameError:
+                logging.warning('Looks like nothing to remove. Is DB general_snaps empty already?')
+                continue
         create_general_snap(general_scheduled_servers)
     for job in scheduler.get_jobs('mysql_scheduled_snaps'):
-        job.remove()
+        try:
+            job.remove()
+        except LookupError:
+            continue
+        except NameError:
+            logging.warning('Looks like nothing to remove. Is DB scheduled_snaps empty already?')
     create_scheduled_snap(snap_sched, server_details)
 
 def wtd(event_handler):
@@ -263,10 +274,13 @@ def create_scheduled_snap(snap_sched, server_details):
         keep_copies     = schedule.split('@', 2)[0]
         if (',' in scheduled_hours or '-' in scheduled_hours) and ('-' in scheduled_days or ',' in scheduled_days):
             snap_name = 'hourly'
+            minute = '0'
         elif '-' not in scheduled_days and ',' not in scheduled_days:
             snap_name = 'weekly'
+            minute = '4'
         elif ',' not in scheduled_hours and '-' not in scheduled_hours:
             snap_name = 'daily'
+            minute = '2'
         for server in servers:
             if '_' in server:
                 server = server.split('_', 1)[0]
@@ -278,13 +292,14 @@ def create_scheduled_snap(snap_sched, server_details):
                             name='%s-%s-%s' % (server, volume, snap_name),
                             day_of_week=scheduled_days,
                             hour='%s' % scheduled_hours,
+                            minute=minute,
                             jobstore='mysql_scheduled_snaps',
                             replace_existing=True,
                             id='%s-%s-%s' % (server, volume, snap_name),
                             misfire_grace_time=600,
                             args=[volume, keep_copies, snap_name])
             except:
-                logging.error("Error: failed to add schedule for VM %s volume %s" % (server, volume))
+                logging.error("Error: failed to add schedule for %s" % (server_details[server]))
                 continue
 
 '''
@@ -343,7 +358,7 @@ def create_service_schedule_job():
         get_snap_sched,
         'interval',
         minutes=5,
-        seconds=30,
+        seconds=37,
         jobstore='mysql_service',
         replace_existing=True,
         id='snap_sched',
@@ -352,6 +367,8 @@ def create_service_schedule_job():
         openstack_server_list,
         'interval',
         hours=3,
+        minutes=7,
+        seconds=17,
         jobstore='mysql_service',
         replace_existing=True,
         id='server_list',
@@ -383,6 +400,7 @@ def main():
     except KeyboardInterrupt:
         observer.stop()
         observer.join()
+        cluster.sutdown()
 
 if __name__ == '__main__':
     main()
