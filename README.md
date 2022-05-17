@@ -60,24 +60,18 @@ It's usign 3 different databases according schedule type:
 By default only scheduled snapshots are triggered.
 
 ```
-usage: snapmanager.py [-h] [--enable-general-snapshots] [--force-general-snapshots]
-         [--force-scheduled-snapshots] --ceph-conf CEPH_CONF --ceph-pool
-         CEPH_POOL
+usage: snapmanager.py [-h] [--enable-general-snapshots] [--force-general-snapshots] [--force-scheduled-snapshots] --ceph-conf CEPH_CONF --ceph-pool CEPH_POOL --os-conf OS_CONF
 
 snapmanager creates, rotate snapshots on RBD images
 
 optional arguments:
   -h, --help            show this help message and exit
   --enable-general-snapshots
-                        enable general snapshots creation for all VMs not
-                        specified in snap_sched.yml
+                        enable general snapshots creation for all VMs not specified in snap_sched.yml
   --force-general-snapshots
-                        force creates snapshots on all VMs using general
-                        snapshot schedule. Can be run only if general
-                        snapshots are enabled.
+                        force creates snapshots on all VMs using general snapshot schedule. Can be run only if general snapshots are enabled.
   --force-scheduled-snapshots
-                        force creates snapshots on all VMs that are scheduled
-                        for snapshots.
+                        force creates snapshots on all VMs that are scheduled for snapshots.
 
 required arguments:
   --ceph-conf CEPH_CONF
