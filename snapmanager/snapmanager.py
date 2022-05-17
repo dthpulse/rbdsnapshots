@@ -334,22 +334,22 @@ def create_rbd_snapshot(volume, keep_copies, snap_name):
         now = datetime.now()
         date_string = now.strftime('%d%m%Y%H')
         image = rbd.Image(ioctx, 'volume-' + volume)
-        snaps_delete = []
+        related_snaps = []
         image_snap_list = list(image.list_snaps())
         if not image_snap_list:
             image.create_snap(snap_name + '_' + date_string)
             image_snap_list = list(image.list_snaps())
         for image_snap in image_snap_list:
             if snap_name in image_snap['name']:
-                snaps_delete.append(image_snap['name'])
-        snaps_filtered = len(snaps_delete) - int(keep_copies) + 1
-        if image_snap['name'] and date_string not in image_snap['name']:
-            image.create_snap(snap_name + '_' + date_string)
+                related_snaps.append(image_snap['name'])
+        snaps_filtered = len(related_snaps) - int(keep_copies) + 1
         if args.force_general_snapshots or args.force_scheduled_snapshots:
-            image.create_snap(snap_name + '_' + 'manual_' + date_string)
+            image.create_snap(snap_name + '_' + 'manual_' + now.strftime('%d%m%Y%H%M'))
+        else:
+            image.create_snap(snap_name + '_' + date_string)
         if snaps_filtered > 0:
-            del snaps_delete[snaps_filtered:]
-            for snap in snaps_delete:
+            del related_snaps[snaps_filtered:]
+            for snap in related_snaps:
                 image.remove_snap(snap)
         image.close()
 
