@@ -187,6 +187,7 @@ def on_modified(event):
                 logging.warning('Looks like nothing to remove. Is DB general_snaps empty already?')
                 continue
         create_general_snap(general_scheduled_servers)
+        openstack_server_list()
     for job in scheduler.get_jobs('mysql_scheduled_snaps'):
         try:
             job.remove()
@@ -195,6 +196,7 @@ def on_modified(event):
         except NameError:
             logging.warning('Looks like nothing to remove. Is DB scheduled_snaps empty already?')
     create_scheduled_snap(snap_sched, server_details)
+    openstack_server_list()
 
 def wtd(event_handler):
     event_handler.on_modified = on_modified
