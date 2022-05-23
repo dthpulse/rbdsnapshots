@@ -301,7 +301,7 @@ def create_scheduled_snap(snap_sched, server_details):
                             misfire_grace_time=600,
                             args=[volume, keep_copies, snap_name])
             except:
-                logging.error("Error: failed to add schedule for %s" % (server_details[server]))
+                logging.error("Error: failed to add schedule for server %s snap_name %s" % (server, snap_name))
                 continue
 
 '''
@@ -402,7 +402,7 @@ def main():
     except KeyboardInterrupt:
         observer.stop()
         observer.join()
-        cluster.sutdown()
+        cluster.shutdown()
 
 if __name__ == '__main__':
     main()
